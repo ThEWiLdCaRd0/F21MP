@@ -1,0 +1,47 @@
+{
+  "id": "blue-04-insecure-design",
+  "role": "blue",
+  "order": 4,
+  "owasp_category": "A04:2021 - Insecure Design",
+  "title": "Patch the Checkout Quantity Flaw",
+  "difficulty": 4,
+  "objective": "Patch checkout to reject invalid (negative or zero) quantities.",
+  "briefing": "Logs show a checkout call with a negative quantity that resulted in an account credit instead of a charge. The endpoint never validates that quantity is a positive number.",
+  "hints": [
+    "Restarting the web server won't add a validation rule that was never written.",
+    "The fix needs to reject the request before it ever computes a charge.",
+    "patch /var/www/api/checkout.php --enforce-positive-quantity"
+  ],
+  "debrief": "The patch adds a server-side check that rejects any checkout request where quantity isn't a positive integer, before the charge/credit calculation ever runs. This closes the specific bug, but the deeper lesson for Insecure Design (A04:2021) is process, not just code: business logic needs abuse-case threat modeling at design time (what if this number is negative, zero, huge, non-numeric?) rather than discovering each one after an attacker finds it.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/api/checkout.php"],
+    "services": ["apache2", "mysql"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[BOOT] mysql started",
+      "[LOGIC] checkout processed negative quantity -5 - account credited $50.00"
+    ]
+  },
+  "commands": {
+    "patch /var/www/api/checkout.php --enforce-positive-quantity": {
+      "output": "patched /var/www/api/checkout.php\nadding validation: quantity must be > 0... done",
+      "state_change": {
+        "logs_append": ["[FIX] checkout now rejects quantity <= 0 before charge calculation"]
+      },
+      "wins_level": true
+    }
+  },
+  "command_patterns": [
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (checkout.php unchanged)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": []
+}

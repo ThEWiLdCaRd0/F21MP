@@ -1,0 +1,63 @@
+{
+  "id": "blue-09-logging-failures",
+  "role": "blue",
+  "order": 9,
+  "owasp_category": "A09:2021 - Security Logging and Monitoring Failures",
+  "title": "Restore Audit Logging and Alerting",
+  "difficulty": 9,
+  "objective": "Restore audit logging and enable alerting for large data transfers.",
+  "briefing": "A large backup file was downloaded and only showed up in the plain access log - the audit-logging/alerting service that should have flagged it is stopped.",
+  "hints": [
+    "Restarting apache2 isn't the same as starting the audit/alerting service.",
+    "Starting the service alone isn't enough either - it also needs alerting turned on.",
+    "start audit-logging --enable-alerts"
+  ],
+  "debrief": "Starting the audit-logging service with alerting enabled means future anomalous events - like a multi-megabyte download of a sensitive file - get flagged in real time instead of quietly blending into ordinary access logs. Starting the service without turning alerting on is a half-measure: logs get written again, but nothing is watching them, which is the exact gap that caused the original incident. This addresses Security Logging and Monitoring Failures (A09:2021) directly: monitoring has to be running and configured with rules for what 'suspicious' looks like, not just technically capable of logging.",
+  "victim_pc_initial_state": {
+    "files": ["/backups/customers.db"],
+    "services": ["apache2"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[WARN] audit-logging service stopped - no security events will be recorded",
+      "[ACCESS] GET /backups/customers.db - 200"
+    ]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "start audit-logging(?P<flags>.*)",
+      "cases": [
+        {
+          "checks": [
+            { "name": "regex", "args": { "field": "flags", "pattern": "--enable-alerts" } }
+          ],
+          "output": "starting audit-logging service...\nalerting rules loaded: large-transfer, off-hours-access, repeated-auth-failure\ndone",
+          "state_change": {
+            "services": ["apache2", "audit-logging"],
+            "logs_append": ["[FIX] audit logging restarted - alerting enabled for anomalous transfers"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "starting audit-logging service...\nno alerting rules loaded - service is running but nothing will flag anomalies\ndone",
+          "state_change": {
+            "services": ["apache2", "audit-logging"],
+            "logs_append": ["[PARTIAL] audit-logging started without alerting - still not monitoring for anomalies"]
+          },
+          "wins_level": false
+        }
+      ]
+    },
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (audit-logging still stopped)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": []
+}

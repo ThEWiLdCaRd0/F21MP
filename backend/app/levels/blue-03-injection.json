@@ -1,0 +1,52 @@
+{
+  "id": "blue-03-injection",
+  "role": "blue",
+  "order": 3,
+  "owasp_category": "A03:2021 - Injection",
+  "title": "Patch the SQL Injection Login Bypass",
+  "difficulty": 3,
+  "objective": "Patch the admin login endpoint so it can no longer be bypassed via SQL injection.",
+  "briefing": "The auth logs show a successful admin login that came from a malformed query, not a real password. The login endpoint is building SQL by pasting user input directly into the query string.",
+  "hints": [
+    "Check the auth logs closely - does one of those logins look like it used SQL syntax instead of a password?",
+    "The fix isn't restarting a service - it's changing how the query is built.",
+    "patch /var/www/admin/login.php --use-parameterized-queries"
+  ],
+  "debrief": "The endpoint was building SQL like: SELECT * FROM users WHERE username = '<input>' AND password = '...' - pasting user input straight into the query. Parameterized queries (a.k.a. prepared statements) fix this by sending the user's input to the database as data, in a separate channel from the SQL command itself, so characters like ' and -- can never change the query's structure no matter what's typed. This is the standard fix for Injection (OWASP A03:2021): never build a query by string-concatenating untrusted input - always use parameterized queries or an ORM that does so under the hood.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/admin/login.php"],
+    "services": ["mysql", "apache2"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[BOOT] mysql started",
+      "[AUTH] admin login from {ip} - bypassed via malformed query"
+    ]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "patch /var/www/admin/login\\.php --use-(parameterized-queries|prepared-statements)",
+      "cases": [
+        {
+          "output": "patched /var/www/admin/login.php\nquery builder now uses bound parameters... done",
+          "state_change": {
+            "logs_append": ["[FIX] login.php now uses parameterized queries - injection no longer possible"]
+          },
+          "wins_level": true
+        }
+      ]
+    },
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (login.php unchanged)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}

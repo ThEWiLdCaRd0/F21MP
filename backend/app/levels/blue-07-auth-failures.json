@@ -1,0 +1,60 @@
+{
+  "id": "blue-07-auth-failures",
+  "role": "blue",
+  "order": 7,
+  "owasp_category": "A07:2021 - Identification and Authentication Failures",
+  "title": "Enable Account Lockout",
+  "difficulty": 7,
+  "objective": "Enable account lockout after repeated failed logins, with a meaningfully low attempt limit.",
+  "briefing": "Logs show the {victim_username} account was compromised after repeated password guesses with no lockout in place. The login endpoint needs a failed-attempt limit.",
+  "hints": [
+    "Restarting the web server doesn't add a lockout policy that doesn't exist yet.",
+    "The fix goes in the app's auth configuration, not the web server.",
+    "patch /etc/app/auth.conf --enable-lockout --max-attempts 5"
+  ],
+  "debrief": "The patch enables a lockout policy: after a small number of failed attempts, the account is temporarily locked, which turns brute-forcing from 'guess forever' into 'guess a handful of times, then wait.' Setting the limit too high (hundreds or thousands of attempts) technically 'enables lockout' but doesn't meaningfully stop brute-forcing - the limit itself is part of the fix, not just the feature flag. This directly addresses Identification and Authentication Failures (A07:2021). For a production system you'd go further - rate limit by IP as well as account, and add MFA so a correct guess alone isn't sufficient.",
+  "victim_pc_initial_state": {
+    "files": ["/etc/app/auth.conf"],
+    "services": ["apache2"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[AUTH] {victim_username} account compromised via brute force - no lockout in place"
+    ]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "patch /etc/app/auth\\.conf --enable-lockout --max-attempts (?P<max>\\d+)",
+      "cases": [
+        {
+          "checks": [
+            { "name": "int_cmp", "args": { "field": "max", "op": "ge", "value": 1 } },
+            { "name": "int_cmp", "args": { "field": "max", "op": "le", "value": 10 } }
+          ],
+          "output": "patched /etc/app/auth.conf\nlockout policy: {max} failed attempts -> 15 min lock... done",
+          "state_change": {
+            "logs_append": ["[FIX] account lockout enabled after {max} failed attempts"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "patched /etc/app/auth.conf\nlockout policy: {max} failed attempts -> 15 min lock... done\nWARNING: {max} attempts is too permissive to meaningfully slow down brute-forcing",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    },
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (auth.conf unchanged)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["victim_username"],
+  "default_values": { "victim_username": "guest" }
+}

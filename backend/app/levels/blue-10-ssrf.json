@@ -1,0 +1,46 @@
+{
+  "id": "blue-10-ssrf",
+  "role": "blue",
+  "order": 10,
+  "owasp_category": "A10:2021 - Server-Side Request Forgery (SSRF)",
+  "title": "Block Internal Requests From the Preview Fetcher",
+  "difficulty": 10,
+  "objective": "Patch the preview fetcher to block requests to internal and metadata addresses.",
+  "briefing": "Logs show the preview endpoint was used to reach the cloud metadata service and expose credentials. The fetcher needs to stop trusting arbitrary destination addresses.",
+  "hints": [
+    "Restarting apache2 doesn't add a destination check that doesn't exist.",
+    "The fix needs to reject requests to internal-only address ranges before they're made.",
+    "patch /var/www/api/preview.php --block-internal-ranges"
+  ],
+  "debrief": "The patch adds a destination check before the server makes any outbound request on the user's behalf: reject RFC1918 private ranges, loopback, link-local addresses, and specifically 169.254.169.254 (the cloud metadata address). This directly fixes the SSRF (A10:2021) by refusing to let a public-facing feature reach internal-only infrastructure. Defense in depth would add an allowlist of expected destination domains/schemes and, on the cloud side, requiring IMDSv2's token-bound requests so metadata access needs more than a bare GET even if a future SSRF slips through.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/api/preview.php"],
+    "services": ["apache2"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[SSRF] preview endpoint used to reach internal metadata service - credentials exposed"
+    ]
+  },
+  "commands": {
+    "patch /var/www/api/preview.php --block-internal-ranges": {
+      "output": "patched /var/www/api/preview.php\nblocking RFC1918, loopback, link-local, and 169.254.169.254... done",
+      "state_change": {
+        "logs_append": ["[FIX] preview fetcher now blocks RFC1918 and 169.254.169.254 metadata requests"]
+      },
+      "wins_level": true
+    }
+  },
+  "command_patterns": [
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (preview.php unchanged)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": []
+}

@@ -1,0 +1,46 @@
+{
+  "id": "red-08-integrity-failures",
+  "role": "red",
+  "order": 8,
+  "owasp_category": "A08:2021 - Software and Data Integrity Failures",
+  "title": "Insecure Deserialization via Session Cookie",
+  "difficulty": 8,
+  "objective": "Exploit insecure deserialization of the session_data cookie to execute a malicious object.",
+  "briefing": "The dashboard at http://{ip}/dashboard reads a session_data cookie and passes it directly into an unserialize() call, with no validation or integrity check on its contents.",
+  "hints": [
+    "The session cookie's value looks less like a random token and more like a serialized object.",
+    "unserialize() will instantiate whatever class name you put in the payload, if that class exists.",
+    "curl http://{ip}/dashboard --cookie \"session_data=O:5:\\\"Alert\\\":0:{}\""
+  ],
+  "debrief": "The server trusted the session_data cookie enough to deserialize it directly, reconstructing whatever object the payload described - including instantiating an arbitrary class you named, which is the first step toward a full gadget-chain remote code execution. This is a Software and Data Integrity Failure (OWASP A08:2021): deserializing data without verifying it came from a trusted source and hasn't been tampered with. The fix is to never deserialize untrusted input directly - use a safe, inspectable format like signed JSON instead, and verify a signature/HMAC before trusting the contents at all.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/app/session.php"],
+    "services": ["apache2"],
+    "logs": ["[BOOT] apache2 started"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl http://{ip}/dashboard --cookie \"session_data=(?P<payload>(?:\\\\.|[^\"])*)\"",
+      "cases": [
+        {
+          "checks": [
+            { "name": "regex", "args": { "field": "payload", "pattern": "^O:\\d+:" } }
+          ],
+          "output": "HTTP/1.1 200 OK\ndeserialization gadget executed",
+          "state_change": {
+            "logs_append": ["[INTEGRITY] malicious serialized object deserialized from session_data cookie - code execution"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "HTTP/1.1 200 OK\ninvalid session - please log in",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}

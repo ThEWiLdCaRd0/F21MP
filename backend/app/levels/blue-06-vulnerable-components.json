@@ -1,0 +1,62 @@
+{
+  "id": "blue-06-vulnerable-components",
+  "role": "blue",
+  "order": 6,
+  "owasp_category": "A06:2021 - Vulnerable and Outdated Components",
+  "title": "Patch the Vulnerable Logging Library",
+  "difficulty": 6,
+  "objective": "Upgrade the vulnerable logging library to a version where the JNDI remote-code-execution flaw is fixed.",
+  "briefing": "Logs show a JNDI lookup was triggered from a request header - the outdated logging library (2.14.1) is vulnerable and needs to be upgraded, not just reconfigured.",
+  "hints": [
+    "Restarting the web server keeps loading the same vulnerable jar.",
+    "The fix is upgrading the dependency itself to a version where this is patched.",
+    "upgrade log4j --to 2.17.1"
+  ],
+  "debrief": "Upgrading to 2.17.0 or later removes the vulnerable JNDI lookup behavior from message logging entirely (these versions disable message-lookup substitution by default) - anything below that line is still exploitable by a related JNDI-lookup variant even if the very first Log4Shell payload stops working. For Vulnerable and Outdated Components (A06:2021), patch-level reconfiguration isn't the durable fix here - the dependency itself needs upgrading, and the real long-term fix is an ongoing process: maintain a software bill of materials (SBOM), track CVEs against your dependency versions, and have a fast path to patch them, rather than discovering the version only after an incident.",
+  "victim_pc_initial_state": {
+    "files": ["/opt/app/lib/log4j-core-2.14.1.jar"],
+    "services": ["apache2"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[BOOT] logging library v2.14.1 loaded",
+      "[VULN] log4j 2.14.1 evaluated JNDI lookup from User-Agent header - RCE triggered"
+    ]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "upgrade log4j --to (?P<version>\\d+\\.\\d+\\.\\d+)",
+      "cases": [
+        {
+          "checks": [
+            { "name": "version_ge", "args": { "field": "version", "threshold": "2.17.0" } }
+          ],
+          "output": "removing log4j-core-2.14.1.jar\ninstalling log4j-core-{version}.jar\nJNDI message lookups disabled by default... done",
+          "state_change": {
+            "files": ["/opt/app/lib/log4j-core-{version}.jar"],
+            "logs_append": ["[FIX] log4j upgraded to {version} - JNDI lookups disabled by default"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "removing log4j-core-2.14.1.jar\ninstalling log4j-core-{version}.jar\nWARNING: {version} is still vulnerable to a JNDI-lookup RCE variant below 2.17.0... done",
+          "state_change": {
+            "logs_append": ["[VULN] upgraded to {version}, still below the safe threshold (2.17.0)"]
+          },
+          "wins_level": false
+        }
+      ]
+    },
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (still loading log4j-core-2.14.1.jar)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": []
+}

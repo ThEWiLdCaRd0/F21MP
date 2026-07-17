@@ -1,0 +1,46 @@
+{
+  "id": "red-02-cryptographic-failures",
+  "role": "red",
+  "order": 2,
+  "owasp_category": "A02:2021 - Cryptographic Failures",
+  "title": "Crack a Leaked Unsalted MD5 Hash",
+  "difficulty": 2,
+  "objective": "Recover the admin password from a leaked database dump by cracking its unsalted MD5 hash.",
+  "briefing": "A leaked dump.sql exposes a users table with a password_md5 column - no salt, no per-user variation. The {victim_username} row's hash is 5f4dcc3b5aa765d61d8327deb882cf99.",
+  "hints": [
+    "Unsalted MD5 means identical passwords always produce this exact hash - it may already be a known one.",
+    "Look this hash up against a list of common leaked passwords.",
+    "crack-hash 5f4dcc3b5aa765d61d8327deb882cf99 --wordlist common.txt --guess password"
+  ],
+  "debrief": "Because the password was hashed with plain MD5 and no per-user salt, every account using the same password produces the identical hash - and that exact hash is one of the most common ones ever leaked online, so it cracks instantly against any common-password wordlist. This is a Cryptographic Failure (OWASP A02:2021): using a fast, unsalted, general-purpose hash for passwords instead of a slow, salted, password-specific one. The fix is bcrypt/argon2/scrypt with a unique salt per user, which makes both dictionary lookups and brute force dramatically slower and defeats identical-hash comparison across users.",
+  "victim_pc_initial_state": {
+    "files": ["/var/backups/dump.sql"],
+    "services": ["mysql"],
+    "logs": ["[BOOT] mysql started", "[LEAK] dump.sql exfiltrated from backup share"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "crack-hash (?P<hash>[a-fA-F0-9]{32}) --wordlist \\S+ --guess (?P<guess>\\S+)",
+      "cases": [
+        {
+          "checks": [
+            { "name": "md5_matches", "args": { "field": "guess", "target": "5f4dcc3b5aa765d61d8327deb882cf99" } }
+          ],
+          "output": "guess '{guess}' -> md5 match!\nplaintext recovered: {guess}",
+          "state_change": {
+            "logs_append": ["[CRYPTO] {victim_username} MD5 hash cracked via wordlist - plaintext recovered"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "guess '{guess}' -> md5 mismatch",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["victim_username"],
+  "default_values": { "victim_username": "admin" }
+}

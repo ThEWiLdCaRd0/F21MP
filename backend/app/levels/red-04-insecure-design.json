@@ -1,0 +1,52 @@
+{
+  "id": "red-04-insecure-design",
+  "role": "red",
+  "order": 4,
+  "owasp_category": "A04:2021 - Insecure Design",
+  "title": "Negative-Quantity Checkout Refund",
+  "difficulty": 4,
+  "objective": "Exploit the checkout endpoint's missing quantity validation to receive a refund instead of paying.",
+  "briefing": "The store's checkout at http://{ip}/api/cart/checkout accepts an item and a quantity. Nothing in the design ever considered what happens if quantity is negative.",
+  "hints": [
+    "The checkout form assumes quantity is always a positive number - is that actually enforced anywhere?",
+    "What do you think happens if you send a negative quantity instead?",
+    "curl -X POST http://{ip}/api/cart/checkout -d \"item={item_name}&quantity=-5\""
+  ],
+  "debrief": "The checkout logic multiplies price by quantity to compute the charge, and nobody designed for quantity being negative - so a negative quantity produces a negative charge, which the system happily applies as a credit to your account. This is Insecure Design (OWASP A04:2021): the flaw isn't a coding typo, it's that abuse cases like 'what if this number is negative' were never considered at design time, so no validation exists anywhere to catch it. The fix isn't just a patch - it's threat-modeling business logic up front and enforcing constraints (quantity > 0) server-side as part of the design, not as an afterthought.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/api/checkout.php"],
+    "services": ["apache2", "mysql"],
+    "logs": ["[BOOT] apache2 started", "[BOOT] mysql started"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl -X POST http://{ip}/api/cart/checkout -d \"item=(?P<item>[^&]+)&quantity=(?P<quantity>-?\\d+)\"",
+      "cases": [
+        {
+          "checks": [
+            { "name": "int_cmp", "args": { "field": "quantity", "op": "lt", "value": 0 } },
+            { "name": "int_derive", "args": { "field": "quantity", "factor": 10, "into": "amount" } }
+          ],
+          "output": "HTTP/1.1 200 OK\n{\"credited\":\"${amount}\"}",
+          "state_change": {
+            "logs_append": ["[LOGIC] checkout processed negative quantity {quantity} - account credited ${amount}"]
+          },
+          "wins_level": true
+        },
+        {
+          "checks": [
+            { "name": "int_derive", "args": { "field": "quantity", "factor": 10, "into": "amount" } }
+          ],
+          "output": "HTTP/1.1 200 OK\n{\"charged\":\"${amount}\"}",
+          "state_change": {
+            "logs_append": ["[LOGIC] checkout processed quantity {quantity} - charged ${amount}"]
+          },
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip", "item_name"],
+  "default_values": { "ip": "10.0.0.5", "item_name": "widget" }
+}

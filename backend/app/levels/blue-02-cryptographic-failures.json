@@ -1,0 +1,60 @@
+{
+  "id": "blue-02-cryptographic-failures",
+  "role": "blue",
+  "order": 2,
+  "owasp_category": "A02:2021 - Cryptographic Failures",
+  "title": "Migrate Off Unsalted MD5",
+  "difficulty": 2,
+  "objective": "Migrate the {victim_username} account off unsalted MD5 to a salted, slow hash.",
+  "briefing": "A backup leak exposed unsalted MD5 password hashes. Before anything else, the stored hashing scheme itself needs to change so a future leak isn't instantly crackable.",
+  "hints": [
+    "Restarting mysql doesn't change how existing passwords are hashed.",
+    "The fix is re-hashing the password with a slow, salted algorithm - bcrypt, argon2, and scrypt all qualify.",
+    "rehash-password {victim_username} --algorithm bcrypt"
+  ],
+  "debrief": "Rehashing with bcrypt (or argon2/scrypt) adds a unique random salt per user and a deliberately slow, tunable work factor, so even two users with the same password get different stored hashes, and cracking attempts (dictionary or brute force) become computationally expensive per guess. This directly fixes the Cryptographic Failure (A02:2021) that made the leaked dump instantly crackable. Also worth doing after any credential leak: rotate the leaked secrets, don't just fix the hashing going forward.",
+  "victim_pc_initial_state": {
+    "files": ["/var/backups/dump.sql"],
+    "services": ["mysql"],
+    "logs": [
+      "[BOOT] mysql started",
+      "[LEAK] dump.sql exfiltrated from backup share",
+      "[CRYPTO] {victim_username} MD5 hash cracked via wordlist - plaintext recovered"
+    ]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "rehash-password {victim_username} --algorithm (?P<algo>\\S+)",
+      "cases": [
+        {
+          "checks": [
+            { "name": "regex", "args": { "field": "algo", "pattern": "^(bcrypt|argon2i?d?|scrypt)$", "flags": "i" } }
+          ],
+          "output": "rehashing {victim_username} password...\nalgorithm: {algo}, cost=12, salt: random per-user\ndone",
+          "state_change": {
+            "logs_append": ["[FIX] {victim_username} password rehashed with {algo} - unsalted MD5 hash retired"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "rehashing {victim_username} password...\nalgorithm: {algo} - still fast and/or unsalted, does not fix the underlying issue\ndone",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    },
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (hashing scheme unchanged)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["victim_username"],
+  "default_values": { "victim_username": "admin" }
+}

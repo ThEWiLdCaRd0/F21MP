@@ -1,0 +1,46 @@
+{
+  "id": "blue-05-security-misconfiguration",
+  "role": "blue",
+  "order": 5,
+  "owasp_category": "A05:2021 - Security Misconfiguration",
+  "title": "Disable the Default Manager Credentials",
+  "difficulty": 5,
+  "objective": "Secure the exposed management console by disabling its default credentials.",
+  "briefing": "Logs show the manager console was accessed using admin:admin. That account needs to be disabled, not just have its password changed later.",
+  "hints": [
+    "Restarting tomcat reloads the same insecure config - it doesn't fix it.",
+    "The fix lives in the manager's user configuration file.",
+    "patch /etc/tomcat/tomcat-users.xml --disable-default-admin"
+  ],
+  "debrief": "The patch removes/disables the factory-default admin account in tomcat-users.xml entirely, rather than just changing its password (which could still be guessed or leaked again). For Security Misconfiguration (A05:2021), the durable fix is a hardened default: no standing default accounts, minimal attack surface for management interfaces, and a deployment checklist that verifies defaults were removed before anything goes live - not a one-time password change after the fact.",
+  "victim_pc_initial_state": {
+    "files": ["/etc/tomcat/tomcat-users.xml"],
+    "services": ["tomcat"],
+    "logs": [
+      "[BOOT] tomcat started on :8080",
+      "[CONFIG] manager console accessed using default credentials admin:admin"
+    ]
+  },
+  "commands": {
+    "patch /etc/tomcat/tomcat-users.xml --disable-default-admin": {
+      "output": "patched /etc/tomcat/tomcat-users.xml\ndefault admin account disabled... done",
+      "state_change": {
+        "logs_append": ["[FIX] default manager credentials disabled - console access now requires a real account"]
+      },
+      "wins_level": true
+    }
+  },
+  "command_patterns": [
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (tomcat-users.xml unchanged)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": []
+}

@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0e14;
+  --surface: #10151d;
+  --surface-border: #263042;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --red-accent: #ff2d55;
+  --red-accent-dim: #3d0d18;
+  --red-glow: rgba(255, 45, 85, 0.45);
+  --blue-accent: #2ee6ff;
+  --blue-accent-dim: #062b36;
+  --blue-glow: rgba(46, 230, 255, 0.45);
+  --success: #39ff88;
+  --warning: #ffcc33;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(46, 230, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 230, 255, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+code,
+.font-mono {
+  font-family: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}

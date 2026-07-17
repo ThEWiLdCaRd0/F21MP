@@ -1,0 +1,48 @@
+{
+  "id": "red-03-injection",
+  "role": "red",
+  "order": 3,
+  "owasp_category": "A03:2021 - Injection",
+  "title": "SQL Injection: Login Bypass",
+  "difficulty": 3,
+  "objective": "Bypass the login form on the victim's internal admin panel.",
+  "briefing": "Recon shows an admin panel at http://{ip}/admin/login. The login form posts username and password to /admin/login. No rate limiting or WAF detected.",
+  "hints": [
+    "Try submitting something unusual in the username field.",
+    "SQL comments can end a query early: -- ",
+    "' OR '1'='1' -- "
+  ],
+  "debrief": "The login form built a SQL query by pasting your username straight into it, something like: SELECT * FROM users WHERE username = '<what you typed>' AND password = '...'. Normally that checks a real username. But by typing ' OR '1'='1' -- you closed the quote early, added a condition that's always true (1=1), and used -- to comment out the rest of the query (including the password check). The database ran: SELECT * FROM users WHERE username = '' OR '1'='1' -- ... which matches every row, so the server let you in as the first user it found, without ever knowing a real password. This is SQL Injection (OWASP A03:2021) — the fix is to never build queries by pasting user input into them; use parameterized queries/prepared statements so user input is always treated as data, never as part of the SQL command.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/admin/login.php"],
+    "services": ["mysql", "apache2"],
+    "logs": ["[BOOT] apache2 started", "[BOOT] mysql started"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl -X POST http://{ip}/admin/login -d \"username=(?P<user>[^&]*)&password=(?P<pass>[^\"]*)\"",
+      "cases": [
+        {
+          "checks": [
+            { "name": "regex", "args": { "field": "user", "pattern": "'\\s*OR\\s+('1'\\s*=\\s*'1'|1\\s*=\\s*1|'\\w+'\\s*=\\s*'\\w+')|'.*(--|#)" } }
+          ],
+          "output": "HTTP/1.1 302 Found\nLocation: /admin/dashboard",
+          "state_change": {
+            "logs_append": ["[AUTH] admin login from {ip} - bypassed via malformed query"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "HTTP/1.1 401 Unauthorized\nInvalid credentials",
+          "state_change": {
+            "logs_append": ["[AUTH] failed login attempt for user '{user}' from {ip}"]
+          },
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}

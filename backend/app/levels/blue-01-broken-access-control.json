@@ -1,0 +1,47 @@
+{
+  "id": "blue-01-broken-access-control",
+  "role": "blue",
+  "order": 1,
+  "owasp_category": "A01:2021 - Broken Access Control",
+  "title": "Patch the Invoice IDOR",
+  "difficulty": 1,
+  "objective": "Patch the invoice endpoint so users can only access their own records.",
+  "briefing": "Access logs show one account (user 1042) requesting invoice ids in sequence, viewing records that aren't theirs. The endpoint needs an ownership check, not just a login check.",
+  "hints": [
+    "Restarting the service won't add a missing check that was never coded.",
+    "The fix has to happen in the invoice endpoint's code itself.",
+    "patch /var/www/api/invoices.php --enable-ownership-check"
+  ],
+  "debrief": "The fix adds a server-side check on every request: does invoice.owner_id match the logged-in user's id? If not, return 403 regardless of whether the id exists. This closes the IDOR by enforcing object-level authorization instead of relying on users only ever guessing their own ids. General rule for Broken Access Control (A01:2021): authorization checks belong on the server, per-object, on every request - never inferred from the UI only showing 'your' links.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/api/invoices.php"],
+    "services": ["apache2", "mysql"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[BOOT] mysql started",
+      "[ACCESS] invoice 1043 viewed by user 1042 - no ownership check performed"
+    ]
+  },
+  "commands": {
+    "patch /var/www/api/invoices.php --enable-ownership-check": {
+      "output": "patched /var/www/api/invoices.php\napplying ownership check middleware... done",
+      "state_change": {
+        "logs_append": ["[FIX] ownership check enabled for /api/invoices - cross-user access now returns 403"]
+      },
+      "wins_level": true
+    }
+  },
+  "command_patterns": [
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (no config changes applied)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": []
+}

@@ -1,0 +1,51 @@
+{
+  "id": "red-09-logging-failures",
+  "role": "red",
+  "order": 9,
+  "owasp_category": "A09:2021 - Security Logging and Monitoring Failures",
+  "title": "Exfiltrate Data With No Alerting In Place",
+  "difficulty": 9,
+  "objective": "Exfiltrate the customer database backup without triggering any security alert.",
+  "briefing": "Recon shows the audit-logging/alerting service on this host is stopped. Plain web access logs still run, but nothing is watching for suspicious activity.",
+  "hints": [
+    "Check what's running on this host - is anything actually watching for suspicious behavior?",
+    "With the audit/alerting service down, a large download won't raise any flags - it'll just look like ordinary traffic.",
+    "curl -o customers.db http://{ip}/backups/customers.db"
+  ],
+  "debrief": "The download succeeded and even showed up in the ordinary web access log - but because the audit-logging/alerting service was stopped, nothing flagged a multi-megabyte download of a customer database backup as suspicious. This is a Security Logging and Monitoring Failure (OWASP A09:2021): logs existing isn't the same as anything being monitored or alerted on. The fix is centralized logging with active alerting rules for anomalous behavior (large transfers, off-hours access, repeated failures) and regularly testing that detection actually fires - not just confirming logs are being written somewhere.",
+  "victim_pc_initial_state": {
+    "files": ["/backups/customers.db"],
+    "services": ["apache2"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[WARN] audit-logging service stopped - no security events will be recorded"
+    ]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl http://{ip}/api/export.*",
+      "cases": [
+        {
+          "output": "HTTP/1.1 403 Forbidden",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    },
+    {
+      "regex": "curl(?: -o \\S+| -O)? http://{ip}/backups/customers\\.db",
+      "cases": [
+        {
+          "output": "HTTP/1.1 200 OK\n4.2MB downloaded",
+          "state_change": {
+            "logs_append": ["[ACCESS] GET /backups/customers.db - 200"]
+          },
+          "wins_level": true
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}

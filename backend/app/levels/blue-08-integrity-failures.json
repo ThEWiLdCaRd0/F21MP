@@ -1,0 +1,46 @@
+{
+  "id": "blue-08-integrity-failures",
+  "role": "blue",
+  "order": 8,
+  "owasp_category": "A08:2021 - Software and Data Integrity Failures",
+  "title": "Replace Deserialization With Signed JSON",
+  "difficulty": 8,
+  "objective": "Replace insecure PHP object deserialization of session_data with signed JSON.",
+  "briefing": "Logs show a malicious serialized object was deserialized from the session_data cookie. The session handler needs to stop trusting raw serialized input entirely.",
+  "hints": [
+    "Restarting the web server doesn't change how session.php parses the cookie.",
+    "The fix replaces unserialize() with a format that can be verified before it's trusted.",
+    "patch /var/www/app/session.php --use-signed-json"
+  ],
+  "debrief": "The patch replaces raw unserialize() with signed JSON: the session data is JSON (so there's no way to instantiate arbitrary classes from it) and it carries an HMAC signature that the server verifies before trusting the contents - if the cookie was tampered with, the signature check fails and the session is rejected. This addresses Software and Data Integrity Failures (A08:2021) at the root: never deserialize or trust data whose integrity you haven't verified, whether that's a session cookie, a software update, or a CI/CD artifact.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/app/session.php"],
+    "services": ["apache2"],
+    "logs": [
+      "[BOOT] apache2 started",
+      "[INTEGRITY] malicious serialized object deserialized from session_data cookie - code execution"
+    ]
+  },
+  "commands": {
+    "patch /var/www/app/session.php --use-signed-json": {
+      "output": "patched /var/www/app/session.php\nsession_data is now HMAC-signed JSON... done",
+      "state_change": {
+        "logs_append": ["[FIX] session_data now uses signed JSON instead of unserialize()"]
+      },
+      "wins_level": true
+    }
+  },
+  "command_patterns": [
+    {
+      "regex": "restart (?P<svc>\\S+)",
+      "cases": [
+        {
+          "output": "{svc}: restarted (session.php unchanged)",
+          "state_change": {},
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": []
+}

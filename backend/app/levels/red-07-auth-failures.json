@@ -1,0 +1,46 @@
+{
+  "id": "red-07-auth-failures",
+  "role": "red",
+  "order": 7,
+  "owasp_category": "A07:2021 - Identification and Authentication Failures",
+  "title": "Brute-Force a Weak, Unthrottled Login",
+  "difficulty": 7,
+  "objective": "Brute-force the login for a low-security account with no rate limiting or lockout.",
+  "briefing": "The /login endpoint accepts unlimited attempts with no delay or lockout. The '{victim_username}' account probably uses a common, weak password.",
+  "hints": [
+    "With no lockout or rate limit, you can just keep guessing passwords freely.",
+    "Try a very common weak password rather than something clever.",
+    "curl -X POST http://{ip}/login -d \"username={victim_username}&password=letmein\""
+  ],
+  "debrief": "The login endpoint never limited failed attempts, so guessing common passwords one after another was never slowed down or blocked - eventually a common weak password ('letmein') matched. This is an Identification and Authentication Failure (OWASP A07:2021): authentication existed, but nothing defended it against brute-forcing or credential stuffing. The fix is layered - account lockout or exponential backoff after repeated failures, rate limiting per IP/account, and ideally MFA so a correct password guess alone isn't enough to log in.",
+  "victim_pc_initial_state": {
+    "files": ["/etc/app/auth.conf"],
+    "services": ["apache2"],
+    "logs": ["[BOOT] apache2 started"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl -X POST http://{ip}/login -d \"username={victim_username}&password=(?P<password>[^\"]*)\"",
+      "cases": [
+        {
+          "when": { "password": "letmein" },
+          "output": "HTTP/1.1 200 OK\n{\"session_token\":\"a1b2c3d4\"}",
+          "state_change": {
+            "logs_append": ["[AUTH] {victim_username} account compromised via brute force - no lockout in place"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "HTTP/1.1 401 Unauthorized",
+          "state_change": {
+            "logs_append": ["[AUTH] failed login for '{victim_username}' - no lockout triggered"]
+          },
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip", "victim_username"],
+  "default_values": { "ip": "10.0.0.5", "victim_username": "guest" }
+}

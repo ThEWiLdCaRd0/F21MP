@@ -1,0 +1,46 @@
+{
+  "id": "red-05-security-misconfiguration",
+  "role": "red",
+  "order": 5,
+  "owasp_category": "A05:2021 - Security Misconfiguration",
+  "title": "Default Credentials on the Management Console",
+  "difficulty": 5,
+  "objective": "Log into the exposed management console using default credentials.",
+  "briefing": "Recon shows a Tomcat manager console at http://{ip}:8080/manager/html, publicly reachable. It's unlikely anyone ever changed the factory defaults.",
+  "hints": [
+    "Admin panels installed from a default package often ship with default credentials that get left in place.",
+    "Try the most obvious possible username/password pair, not a clever one.",
+    "curl -u admin:admin http://{ip}:8080/manager/html"
+  ],
+  "debrief": "The management console was left running with its out-of-the-box default credentials (admin:admin) - nobody changed them, and nobody disabled the console for an environment that doesn't need it exposed. This is Security Misconfiguration (OWASP A05:2021): a secure feature (authentication) existed, but was deployed with an insecure default. The fix is twofold - change or remove every default credential before going live, and disable/restrict management interfaces that don't need to be internet-facing at all.",
+  "victim_pc_initial_state": {
+    "files": ["/etc/tomcat/tomcat-users.xml"],
+    "services": ["tomcat"],
+    "logs": ["[BOOT] tomcat started on :8080"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl -u (?P<user>[^:]+):(?P<pass>\\S+) http://{ip}:8080/manager/html",
+      "cases": [
+        {
+          "when": { "user": "admin", "pass": "admin" },
+          "output": "HTTP/1.1 200 OK\nManager console access granted",
+          "state_change": {
+            "logs_append": ["[CONFIG] manager console accessed using default credentials admin:admin"]
+          },
+          "wins_level": true
+        },
+        {
+          "output": "HTTP/1.1 401 Unauthorized",
+          "state_change": {
+            "logs_append": ["[AUTH] failed manager login attempt for user '{user}'"]
+          },
+          "wins_level": false
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}

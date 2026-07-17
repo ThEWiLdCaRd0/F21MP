@@ -1,0 +1,46 @@
+{
+  "id": "red-01-broken-access-control",
+  "role": "red",
+  "order": 1,
+  "owasp_category": "A01:2021 - Broken Access Control",
+  "title": "IDOR: Read Another User's Invoice",
+  "difficulty": 1,
+  "objective": "Access another user's private invoice without authorization (IDOR).",
+  "briefing": "You're logged in as user 1042. The billing app exposes invoices at http://{ip}/api/invoices/{id} with no check that the requested id belongs to you.",
+  "hints": [
+    "Look at the invoice URL - is there an id you could just change?",
+    "Try requesting an id that isn't yours, close to your own.",
+    "curl http://{ip}/api/invoices/1043"
+  ],
+  "debrief": "The invoice endpoint checked that you were logged in, but never checked that the invoice you asked for actually belonged to you - it trusted the id in the URL. Incrementing it let you read another user's private data. This is Broken Access Control (OWASP A01:2021): authentication was fine, authorization was missing. The fix is an object-level authorization check on every request - the server must verify the logged-in user owns the specific record being requested, not just that they're logged in at all.",
+  "victim_pc_initial_state": {
+    "files": ["/var/www/api/invoices.php"],
+    "services": ["apache2", "mysql"],
+    "logs": ["[BOOT] apache2 started", "[BOOT] mysql started"]
+  },
+  "commands": {},
+  "command_patterns": [
+    {
+      "regex": "curl http://{ip}/api/invoices/(?P<id>\\d+)",
+      "cases": [
+        {
+          "when": { "id": "1042" },
+          "output": "HTTP/1.1 200 OK\n{\"id\":1042,\"owner\":\"you\",\"amount\":\"$84.00\"}",
+          "state_change": {
+            "logs_append": ["[ACCESS] invoice 1042 viewed by user 1042"]
+          },
+          "wins_level": false
+        },
+        {
+          "output": "HTTP/1.1 200 OK\n{\"id\":{id},\"owner\":\"user_{id}\",\"amount\":\"$212.50\"}",
+          "state_change": {
+            "logs_append": ["[ACCESS] invoice {id} viewed by user 1042 - no ownership check performed"]
+          },
+          "wins_level": true
+        }
+      ]
+    }
+  ],
+  "randomizable_fields": ["ip"],
+  "default_values": { "ip": "10.0.0.5" }
+}
