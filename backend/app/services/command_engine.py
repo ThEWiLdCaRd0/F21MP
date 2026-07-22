@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.db import get_connection
-from app.services import randomizer
+from app.services import randomizer, tool_engine
 
 LEVELS_DIR = Path(__file__).parent.parent / "levels"
 INTROS_PATH = LEVELS_DIR / "vulnerability_intros.json"
@@ -255,6 +255,18 @@ def run_command(level_id: str, session_id: str, command: str) -> dict:
         match = _match_pattern(level, normalized)
 
     if match is None:
+        # Final fallback: a generic, read-only tool interpreter (nmap/ps/ls/cat
+        # style) rendered from the level's *actual current* victim_pc_state.
+        # Never sets wins_level and never changes state - it only narrates
+        # what's already there, so it can't interfere with a level's authored
+        # win condition (see tool_engine.py's module docstring).
+        generic_output = tool_engine.try_generic_tool(normalized, state)
+        if generic_output is not None:
+            return {
+                "terminal_output": generic_output,
+                "victim_pc_state": state,
+                "wins_level": False,
+            }
         return {
             "terminal_output": f"command not recognized: {command}",
             "victim_pc_state": state,
