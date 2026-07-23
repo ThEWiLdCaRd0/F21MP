@@ -379,20 +379,67 @@ not yet browser-verified (see Next steps).
   serve either side, reached via Learn now instead of a role-locked dashboard.
   Verified: `tsc --noEmit` clean, `npm run build` succeeds, `/api/health` and
   `/api/vulnerabilities` both resolve through the Vite dev proxy. **Not yet
-  browser-verified** — no browser tool was available this session (Claude in Chrome
-  was declined), so the actual click-through flow hasn't been watched end-to-end by
-  Claude, only by static checks + curl against the API layer it calls.
+  browser-verified** — no browser automation tool was available this session (it
+  was declined), so the actual click-through flow hasn't been watched end-to-end,
+  only by static checks + curl against the API layer it calls.
+
+## Completed this session (2026-07-22)
+
+- **Generic read-only tool interpreter** (`backend/app/services/tool_engine.py`, new
+  file) — a final fallback tier in `command_engine.run_command`, tried only after a
+  level's own literal `commands` dict and `command_patterns` have both already had a
+  chance to match/win. Recognizes `nmap <target>`, `ps aux`, `service --status-all` /
+  `systemctl list-units...`, `ls <path>`, `cat <path>` and renders plausible tool-shaped
+  output from the *session's actual current* `victim_pc_state` (services/files) — e.g.
+  `nmap` lists real ports/banners for whatever's actually running, `cat` never dumps
+  real file contents (permission-denied-style response), so it can't leak a level's
+  answer key. Never sets `wins_level`, never mutates state, and — same as the existing
+  plain "command not recognized" path — never counts as an attempt. Small hand-
+  maintained `SERVICE_PROFILES` port/banner table (`rules.md`: no premature
+  abstraction); all four service names actually used across the 20 levels (`apache2`,
+  `mysql`, `tomcat`, `audit-logging`) are covered, so the "unrecognized service"
+  fallback branch never fires on real content today.
+- **Reviewed, playtested, checked for gameplay compromises** (user's explicit ask).
+  Ran the committed `test_patch_gate.py` against the live server first — it failed,
+  but not from this change: Ollama is now running/warm on this machine, so the `ip`
+  field gets live-generated (e.g. `12345`) instead of the script's hardcoded
+  `10.0.0.5` default, which is the pre-existing "shape-safe but not always realistic"
+  behavior documented in `architecture.md` §5, not a regression. Confirmed no
+  regression by re-running the same 20 winning commands in-process with Ollama's call
+  stubbed out (deterministic fallback values) — **20/20 still win**. Then playtested
+  the new fallback itself (all passed): `nmap`/`ps aux` reflect the real per-session
+  service list, `ls`/`cat` reflect real files without leaking content, zero state
+  mutation, zero attempts recorded, works on Blue levels too. **Compromise checks**:
+  recon after a patch still doesn't win and doesn't bypass the patch gate — the real
+  exploit is still correctly denied afterward; a genuinely unrecognized command still
+  falls through to "command not recognized" as before. No gameplay compromises found.
+- **Committed and pushed** (`28a0c45`, `origin/main`).
+- **Deferred, not done** (flagged to the user, not requested): `test_patch_gate.py`'s
+  hardcoded `10.0.0.5` is now stale against a live-Ollama run and could use a fix
+  (fetch the materialized ip from `/detail` instead of assuming the default); no
+  committed `test_tool_engine.py` yet, unlike the per-feature test convention
+  `test_patch_gate.py` set — the in-process checks used this session were scratchpad-
+  only, not committed.
 
 ## Currently working on
 
 Nothing in progress. Phase 3 (game development) and Phase 4 (testing end-to-end) are
-both now substantively done: all 20 levels, the command engine, the patch gate, and
-the randomizer are built and verified (including a real, non-mocked Ollama run), and
-a committed test (`test_patch_gate.py`) covers the patch-gate cycle across all 10
-categories. The `GET /api/levels?role=` cleanup is the only loose end.
+both substantively done: all 20 levels, the command engine (now with the generic
+read-only tool fallback), the patch gate, and the randomizer are built and verified,
+and a committed test (`test_patch_gate.py`) covers the patch-gate cycle across all 10
+categories. The `GET /api/levels?role=` cleanup and the two deferred items above (test
+script staleness, no committed `test_tool_engine.py`) are the only loose ends.
 
 ## Next steps
 
+- [ ] `test_patch_gate.py`'s hardcoded winning commands assume the `ip` default
+      (`10.0.0.5`); now that Ollama runs live on this machine they can live-generate
+      to something else (e.g. `12345`), making the script flaky against a live
+      server. Fix by reading the materialized value back from `/detail` instead of
+      hardcoding it, or by stubbing the Ollama call for a deterministic CI-style run.
+- [ ] Optionally add a committed `test_tool_engine.py` for the new generic-tool
+      fallback (nmap/ps/ls/cat), matching `test_patch_gate.py`'s convention — not
+      done yet, this session's verification was scratchpad-only.
 - [x] **Browser-test the new flow end-to-end** — user confirmed 2026-07-17: played it
       live, the exploit-denial message rendered correctly in the terminal after
       patching. Core patch-gate mechanic confirmed working through the actual UI, not

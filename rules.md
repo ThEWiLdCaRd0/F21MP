@@ -49,7 +49,7 @@ real decision is made that future-you or another dev would need to know.
 
 ## Assistant conventions
 
-- Every response from Claude in this project starts with the literal word `MLEM`, per
+- Every AI-assistant response in this project starts with the literal word `MLEM`, per
   standing user instruction — not a code rule, just recorded here so it doesn't get
   dropped.
 
